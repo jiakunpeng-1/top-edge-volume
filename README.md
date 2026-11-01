@@ -16,14 +16,15 @@
 - 自动跟随默认播放设备：切换扬声器、耳机或蓝牙设备后，无须重启程序。
 - 托盘右键菜单可暂停功能、设置触发区高度和单次调整步长。
 - 可从托盘菜单启用或关闭开机自动启动。
-- 单文件、自包含的 x64 EXE，无需安装 AutoHotkey 或 .NET 运行时。
+- 单文件、轻量的 x64 EXE（约 0.25 MB），无需安装 AutoHotkey；首次运行前需要安装 .NET 8 Desktop Runtime。
 
 ### 使用方法
 
-1. 从 [Releases](../../releases) 下载 `TopEdgeVolume.exe` 并运行。
-2. 将鼠标放到任意显示器顶部或底部的触发区域内（默认 12 像素）。
-3. 向上或向下滚动滚轮调节系统音量。
-4. 右键系统托盘图标可更改设置或退出程序。
+1. 安装 [.NET 8 Desktop Runtime（Windows x64）](https://dotnet.microsoft.com/download/dotnet/8.0)。
+2. 从 [Releases](../../releases) 下载 `TopEdgeVolume.exe` 并运行。
+3. 将鼠标放到任意显示器顶部或底部的触发区域内（默认 12 像素）。
+4. 向上或向下滚动滚轮调节系统音量。
+5. 右键系统托盘图标可更改设置或退出程序。
 
 ### 托盘菜单
 
@@ -46,19 +47,21 @@
 
 ### 从源码构建
 
-要求：Windows 10/11 与 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)。
+要求：Windows 10/11 与 [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)。下列命令生成与 Release 相同的轻量版；使用者需要安装 .NET 8 Desktop Runtime。
 
 ```powershell
 dotnet publish .\TopEdgeVolume\TopEdgeVolume.csproj `
   -c Release `
   -r win-x64 `
-  --self-contained true `
+  --self-contained false `
   -p:PublishSingleFile=true `
   -p:IncludeNativeLibrariesForSelfExtract=true `
   -o .\publish
 ```
 
 生成的程序位于 `publish\TopEdgeVolume.exe`。
+
+如果需要无需 .NET 运行时的独立版，请将 `--self-contained false` 改为 `--self-contained true`；该版本会内置运行时，体积约为 160 MB。
 
 ### 许可证
 
@@ -76,7 +79,7 @@ Top Edge Volume is a small, windowless Windows tray utility. Move the pointer to
 - Uses the Windows Core Audio API directly for responsive volume changes.
 - Tracks the current default output device after you switch speakers, headphones, or Bluetooth audio.
 - Lets you configure the edge height, volume step, and automatic startup from the tray menu.
-- Ships as a self-contained x64 executable with no AutoHotkey or .NET runtime installation required.
+- Ships as a tiny, single-file x64 executable (about 0.25 MB). It does not need AutoHotkey, but it requires the .NET 8 Desktop Runtime.
 
 ### Build
 

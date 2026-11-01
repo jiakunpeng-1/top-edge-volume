@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.1.1 — 2026-11-01
+
+- Publish a lightweight framework-dependent executable that is about 0.25 MB.
+- Document the .NET 8 Desktop Runtime requirement and the optional self-contained build.
+
 ## 1.1.0 — 2026-11-01
 
 - Add optional bottom-edge mouse-wheel volume control, enabled by default.
