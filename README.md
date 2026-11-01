@@ -2,7 +2,7 @@
 
 ![Top Edge Volume icon](TopEdgeVolume/Assets/TopEdgeVolume.png)
 
-一个轻量、无窗口的 Windows 托盘工具：把鼠标移到**任意显示器的顶部边缘**，滚动滚轮即可调整系统音量。
+一个轻量、无窗口的 Windows 托盘工具：把鼠标移到**任意显示器的顶部或底部边缘**，滚动滚轮即可调整系统音量。
 
 [English](#english) · [中文](#中文)
 
@@ -10,7 +10,7 @@
 
 ### 功能
 
-- 支持多显示器：每一块屏幕的顶部边缘均可触发。
+- 支持多显示器：每一块屏幕的顶部和底部边缘均可触发。
 - 向上滚动增大音量，向下滚动减小音量。
 - 直接调用 Windows Core Audio，不模拟媒体键，响应迅速。
 - 自动跟随默认播放设备：切换扬声器、耳机或蓝牙设备后，无须重启程序。
@@ -21,7 +21,7 @@
 ### 使用方法
 
 1. 从 [Releases](../../releases) 下载 `TopEdgeVolume.exe` 并运行。
-2. 将鼠标放到任意显示器顶部的触发区域内（默认 12 像素）。
+2. 将鼠标放到任意显示器顶部或底部的触发区域内（默认 12 像素）。
 3. 向上或向下滚动滚轮调节系统音量。
 4. 右键系统托盘图标可更改设置或退出程序。
 
@@ -30,6 +30,7 @@
 | 设置 | 可选项 | 默认值 |
 | --- | --- | --- |
 | 顶部触发区域 | 4 / 8 / 12 / 16 像素 | 12 像素 |
+| 底部边缘调音量 | 开 / 关 | 开 |
 | 滚轮调整步长 | 1 / 2 / 3 / 5 格 | 1 格 |
 | 开机自动启动 | 开 / 关 | 关 |
 
@@ -69,9 +70,9 @@ dotnet publish .\TopEdgeVolume\TopEdgeVolume.csproj `
 
 ### What it does
 
-Top Edge Volume is a small, windowless Windows tray utility. Move the pointer to the top edge of any monitor and use the mouse wheel to change the system volume.
+Top Edge Volume is a small, windowless Windows tray utility. Move the pointer to the top or bottom edge of any monitor and use the mouse wheel to change the system volume.
 
-- Works on multiple monitors.
+- Works on the top and bottom edges of every monitor.
 - Uses the Windows Core Audio API directly for responsive volume changes.
 - Tracks the current default output device after you switch speakers, headphones, or Bluetooth audio.
 - Lets you configure the edge height, volume step, and automatic startup from the tray menu.

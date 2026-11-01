@@ -35,6 +35,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
             CheckOnClick = true,
             Checked = true
         };
+        var bottomEnabledItem = new ToolStripMenuItem("启用底部边缘调音量")
+        {
+            CheckOnClick = true,
+            Checked = true
+        };
 
         var edgeHeightMenu = new ToolStripMenuItem("顶部触发区域");
         foreach (var height in new[] { 4, 8, 12, 16 })
@@ -50,6 +55,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
 
         menu.Items.Add(enabledItem);
+        menu.Items.Add(bottomEnabledItem);
         menu.Items.Add(edgeHeightMenu);
         menu.Items.Add(CreateVolumeStepMenu());
         var startupItem = new ToolStripMenuItem("开机自动启动")
@@ -65,13 +71,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _notificationIcon = new NotifyIcon
         {
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application,
-            Text = "屏幕顶部滚轮调音量",
+            Text = "屏幕边缘滚轮调音量",
             ContextMenuStrip = menu,
             Visible = true
         };
 
         _mouseHook = new TopEdgeMouseHook(
             () => enabledItem.Checked,
+            () => bottomEnabledItem.Checked,
             () => Volatile.Read(ref _edgeHeightPixels),
             () => Volatile.Read(ref _volumeStepsPerWheel),
             _volumeController.Change,
@@ -86,8 +93,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         catch (Exception exception)
         {
             MessageBox.Show(
-                $"无法启动顶部滚轮调音量。\n\n{exception.Message}",
-                "顶部滚轮调音量",
+                $"无法启动边缘滚轮调音量。\n\n{exception.Message}",
+                "边缘滚轮调音量",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
             ExitThread();
@@ -169,8 +176,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _hasShownActivationHint = true;
         _notificationIcon.ShowBalloonTip(
             1500,
-            "顶部滚轮调音量",
-            "已识别顶部滚轮，正在调节系统音量。",
+            "边缘滚轮调音量",
+            "已识别屏幕边缘滚轮，正在调节系统音量。",
             ToolTipIcon.Info);
     }
 
@@ -184,7 +191,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _hasShownErrorHint = true;
         _notificationIcon.ShowBalloonTip(
             3000,
-            "顶部滚轮调音量",
+            "边缘滚轮调音量",
             $"调音量时出现错误：{exception.GetType().Name}",
             ToolTipIcon.Error);
     }
@@ -222,7 +229,7 @@ internal static class StartupRegistration
         {
             shortcut.TargetPath = Application.ExecutablePath;
             shortcut.WorkingDirectory = AppContext.BaseDirectory;
-            shortcut.Description = "顶部滚轮调音量";
+            shortcut.Description = "边缘滚轮调音量";
             shortcut.Save();
             return true;
         });
@@ -295,7 +302,8 @@ internal sealed class TopEdgeMouseHook : IDisposable
 {
     private const int WhMouseLl = 14;
     private const nint WmMouseWheel = 0x020A;
-    private readonly Func<bool> _isEnabled;
+    private readonly Func<bool> _isTopEdgeEnabled;
+    private readonly Func<bool> _isBottomEdgeEnabled;
     private readonly Func<int> _edgeHeightPixels;
     private readonly Func<int> _volumeStepsPerWheel;
     private readonly Action<bool, int> _changeVolume;
@@ -305,14 +313,16 @@ internal sealed class TopEdgeMouseHook : IDisposable
     private nint _hookHandle;
 
     public TopEdgeMouseHook(
-        Func<bool> isEnabled,
+        Func<bool> isTopEdgeEnabled,
+        Func<bool> isBottomEdgeEnabled,
         Func<int> edgeHeightPixels,
         Func<int> volumeStepsPerWheel,
         Action<bool, int> changeVolume,
         Action onTriggered,
         Action<Exception> onError)
     {
-        _isEnabled = isEnabled;
+        _isTopEdgeEnabled = isTopEdgeEnabled;
+        _isBottomEdgeEnabled = isBottomEdgeEnabled;
         _edgeHeightPixels = edgeHeightPixels;
         _volumeStepsPerWheel = volumeStepsPerWheel;
         _changeVolume = changeVolume;
@@ -352,10 +362,16 @@ internal sealed class TopEdgeMouseHook : IDisposable
     {
         try
         {
-            if (code >= 0 && wParam == WmMouseWheel && _isEnabled())
+            var topEdgeEnabled = _isTopEdgeEnabled();
+            var bottomEdgeEnabled = _isBottomEdgeEnabled();
+            if (code >= 0 && wParam == WmMouseWheel && (topEdgeEnabled || bottomEdgeEnabled))
             {
                 var mouse = Marshal.PtrToStructure<NativeMethods.MsllHookStruct>(lParam);
-                if (NativeMethods.IsAtTopEdge(mouse.Point, _edgeHeightPixels()))
+                if (NativeMethods.IsAtVolumeEdge(
+                        mouse.Point,
+                        _edgeHeightPixels(),
+                        topEdgeEnabled,
+                        bottomEdgeEnabled))
                 {
                     var wheelDelta = unchecked((short)(mouse.MouseData >> 16));
                     if (wheelDelta != 0)
@@ -707,7 +723,11 @@ internal static class NativeMethods
         public uint Flags;
     }
 
-    internal static bool IsAtTopEdge(Point point, int edgeHeightPixels)
+    internal static bool IsAtVolumeEdge(
+        Point point,
+        int edgeHeightPixels,
+        bool topEdgeEnabled,
+        bool bottomEdgeEnabled)
     {
         var monitor = MonitorFromPoint(point, MonitorDefaultToNearest);
         if (monitor == nint.Zero)
@@ -716,9 +736,17 @@ internal static class NativeMethods
         }
 
         var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
-        return GetMonitorInfo(monitor, ref info)
-               && point.Y >= info.Monitor.Top
-               && point.Y < info.Monitor.Top + edgeHeightPixels;
+        if (!GetMonitorInfo(monitor, ref info))
+        {
+            return false;
+        }
+
+        var edgeHeight = Math.Max(1, edgeHeightPixels);
+        var atTopEdge = point.Y >= info.Monitor.Top
+                        && point.Y < info.Monitor.Top + edgeHeight;
+        var atBottomEdge = point.Y >= info.Monitor.Bottom - edgeHeight
+                           && point.Y < info.Monitor.Bottom;
+        return (topEdgeEnabled && atTopEdge) || (bottomEdgeEnabled && atBottomEdge);
     }
 
     internal static void TryEnablePerMonitorDpiAwareness()

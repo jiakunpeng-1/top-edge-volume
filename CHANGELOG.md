@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented in this file.
 
+## 1.1.0 — 2026-11-01
+
+- Add optional bottom-edge mouse-wheel volume control, enabled by default.
+
 ## 1.0.0 — 2026-11-01
 
 - Initial public release.
