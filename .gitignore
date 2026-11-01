@@ -1,0 +1,15 @@
+# .NET build output
+[Bb]in/
+[Oo]bj/
+
+# Local single-file publish folders
+publish*/
+
+# Visual Studio and user-specific files
+.vs/
+*.user
+*.suo
+
+# Test and diagnostic output
+TestResults/
+*.log
