@@ -12,6 +12,7 @@
 
 - 支持多显示器：每一块屏幕的顶部和底部边缘均可触发。
 - 向上滚动增大音量，向下滚动减小音量。
+- 调整时显示当前音量百分比，停止滚动后自动隐藏提示。
 - 直接调用 Windows Core Audio，不模拟媒体键，响应迅速。
 - 自动跟随默认播放设备：切换扬声器、耳机或蓝牙设备后，无须重启程序。
 - 托盘右键菜单可暂停功能、设置触发区高度和单次调整步长。
@@ -76,6 +77,7 @@ dotnet publish .\TopEdgeVolume\TopEdgeVolume.csproj `
 Top Edge Volume is a small, windowless Windows tray utility. Move the pointer to the top or bottom edge of any monitor and use the mouse wheel to change the system volume.
 
 - Works on the top and bottom edges of every monitor.
+- Shows the current volume percentage while adjusting, then hides automatically after scrolling stops.
 - Uses the Windows Core Audio API directly for responsive volume changes.
 - Tracks the current default output device after you switch speakers, headphones, or Bluetooth audio.
 - Lets you configure the edge height, volume step, and automatic startup from the tray menu.

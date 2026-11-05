@@ -19,12 +19,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly NotifyIcon _notificationIcon;
     private readonly SystemVolumeController _volumeController = new();
+    private readonly VolumeOverlay _volumeOverlay = new();
     private readonly TopEdgeMouseHook _mouseHook;
     private readonly List<ToolStripMenuItem> _edgeHeightItems = [];
     private readonly List<ToolStripMenuItem> _volumeStepItems = [];
     private int _edgeHeightPixels = 12;
     private int _volumeStepsPerWheel = 1;
-    private bool _hasShownActivationHint;
     private bool _hasShownErrorHint;
 
     public TrayApplicationContext()
@@ -82,7 +82,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             () => Volatile.Read(ref _edgeHeightPixels),
             () => Volatile.Read(ref _volumeStepsPerWheel),
             _volumeController.Change,
-            ShowActivationHint,
+            ShowVolumeOverlay,
             ShowErrorHint);
 
         try
@@ -106,6 +106,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _notificationIcon.Visible = false;
         _mouseHook.Dispose();
         _volumeController.Dispose();
+        _volumeOverlay.Dispose();
         _notificationIcon.Dispose();
         base.ExitThreadCore();
     }
@@ -166,19 +167,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
     }
 
-    private void ShowActivationHint()
+    private void ShowVolumeOverlay(int volumePercentage, NativeMethods.Point mousePosition)
     {
-        if (_hasShownActivationHint)
-        {
-            return;
-        }
-
-        _hasShownActivationHint = true;
-        _notificationIcon.ShowBalloonTip(
-            1500,
-            "边缘滚轮调音量",
-            "已识别屏幕边缘滚轮，正在调节系统音量。",
-            ToolTipIcon.Info);
+        _volumeOverlay.ShowVolume(volumePercentage, mousePosition);
     }
 
     private void ShowErrorHint(Exception exception)
@@ -194,6 +185,109 @@ internal sealed class TrayApplicationContext : ApplicationContext
             "边缘滚轮调音量",
             $"调音量时出现错误：{exception.GetType().Name}",
             ToolTipIcon.Error);
+    }
+}
+
+internal sealed class VolumeOverlay : Form
+{
+    private const int HideDelayMilliseconds = 1200;
+    private readonly Label _percentageLabel;
+    private readonly Panel _progressTrack;
+    private readonly Panel _progressFill;
+    private readonly System.Windows.Forms.Timer _hideTimer;
+
+    public VolumeOverlay()
+    {
+        AutoScaleMode = AutoScaleMode.Dpi;
+        BackColor = Color.FromArgb(32, 38, 50);
+        ClientSize = new Size(160, 76);
+        FormBorderStyle = FormBorderStyle.None;
+        ShowInTaskbar = false;
+        StartPosition = FormStartPosition.Manual;
+        TopMost = true;
+
+        var captionLabel = new Label
+        {
+            AutoSize = true,
+            ForeColor = Color.FromArgb(190, 200, 215),
+            Font = new Font("Segoe UI", 9f, FontStyle.Regular, GraphicsUnit.Point),
+            Location = new Point(16, 12),
+            Text = "音量"
+        };
+        _percentageLabel = new Label
+        {
+            AutoSize = true,
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 21f, FontStyle.Bold, GraphicsUnit.Point),
+            Location = new Point(14, 25),
+            Text = "0%"
+        };
+        _progressTrack = new Panel
+        {
+            BackColor = Color.FromArgb(79, 88, 105),
+            Location = new Point(79, 49),
+            Size = new Size(65, 7)
+        };
+        _progressFill = new Panel
+        {
+            BackColor = Color.FromArgb(91, 192, 235),
+            Dock = DockStyle.Left
+        };
+        _progressTrack.Controls.Add(_progressFill);
+        Controls.Add(captionLabel);
+        Controls.Add(_percentageLabel);
+        Controls.Add(_progressTrack);
+
+        _hideTimer = new System.Windows.Forms.Timer { Interval = HideDelayMilliseconds };
+        _hideTimer.Tick += (_, _) =>
+        {
+            _hideTimer.Stop();
+            Hide();
+        };
+    }
+
+    protected override bool ShowWithoutActivation => true;
+
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var parameters = base.CreateParams;
+            parameters.ExStyle |= 0x08000000; // WS_EX_NOACTIVATE
+            parameters.ExStyle |= 0x00000080; // WS_EX_TOOLWINDOW
+            return parameters;
+        }
+    }
+
+    public void ShowVolume(int volumePercentage, NativeMethods.Point mousePosition)
+    {
+        var percentage = Math.Clamp(volumePercentage, 0, 100);
+        _percentageLabel.Text = $"{percentage}%";
+        _progressFill.Width = (int)Math.Round(_progressTrack.Width * percentage / 100d);
+
+        var screen = Screen.FromPoint(new Point(mousePosition.X, mousePosition.Y));
+        var area = screen.WorkingArea;
+        Location = new Point(
+            area.Left + (area.Width - Width) / 2,
+            area.Bottom - Height - 48);
+
+        if (!Visible)
+        {
+            Show();
+        }
+
+        _hideTimer.Stop();
+        _hideTimer.Start();
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _hideTimer.Dispose();
+        }
+
+        base.Dispose(disposing);
     }
 }
 
@@ -306,8 +400,8 @@ internal sealed class TopEdgeMouseHook : IDisposable
     private readonly Func<bool> _isBottomEdgeEnabled;
     private readonly Func<int> _edgeHeightPixels;
     private readonly Func<int> _volumeStepsPerWheel;
-    private readonly Action<bool, int> _changeVolume;
-    private readonly Action _onTriggered;
+    private readonly Func<bool, int, int> _changeVolume;
+    private readonly Action<int, NativeMethods.Point> _onVolumeChanged;
     private readonly Action<Exception> _onError;
     private readonly NativeMethods.LowLevelMouseProc _hookProcedure;
     private nint _hookHandle;
@@ -317,8 +411,8 @@ internal sealed class TopEdgeMouseHook : IDisposable
         Func<bool> isBottomEdgeEnabled,
         Func<int> edgeHeightPixels,
         Func<int> volumeStepsPerWheel,
-        Action<bool, int> changeVolume,
-        Action onTriggered,
+        Func<bool, int, int> changeVolume,
+        Action<int, NativeMethods.Point> onVolumeChanged,
         Action<Exception> onError)
     {
         _isTopEdgeEnabled = isTopEdgeEnabled;
@@ -326,7 +420,7 @@ internal sealed class TopEdgeMouseHook : IDisposable
         _edgeHeightPixels = edgeHeightPixels;
         _volumeStepsPerWheel = volumeStepsPerWheel;
         _changeVolume = changeVolume;
-        _onTriggered = onTriggered;
+        _onVolumeChanged = onVolumeChanged;
         _onError = onError;
         _hookProcedure = HookCallback;
     }
@@ -376,8 +470,8 @@ internal sealed class TopEdgeMouseHook : IDisposable
                     var wheelDelta = unchecked((short)(mouse.MouseData >> 16));
                     if (wheelDelta != 0)
                     {
-                        _changeVolume(wheelDelta > 0, _volumeStepsPerWheel());
-                        _onTriggered();
+                        var volumePercentage = _changeVolume(wheelDelta > 0, _volumeStepsPerWheel());
+                        _onVolumeChanged(volumePercentage, mouse.Point);
                         return 1; // 调音量时不再把滚轮事件交给前台程序。
                     }
                 }
@@ -412,21 +506,21 @@ internal sealed class SystemVolumeController : IDisposable
         }
     }
 
-    public void Change(bool increase, int steps)
+    public int Change(bool increase, int steps)
     {
         lock (_sync)
         {
             ThrowIfDisposed();
             try
             {
-                ChangeCore(increase, steps);
+                return ChangeCore(increase, steps);
             }
             catch (COMException)
             {
                 // 输出设备在运行中被拔出时，刷新一次连接后重试。
                 ReleaseEndpoint();
                 Volatile.Write(ref _defaultRenderDeviceChanged, false);
-                ChangeCore(increase, steps);
+                return ChangeCore(increase, steps);
             }
         }
     }
@@ -453,7 +547,7 @@ internal sealed class SystemVolumeController : IDisposable
         }
     }
 
-    private void ChangeCore(bool increase, int steps)
+    private int ChangeCore(bool increase, int steps)
     {
         var endpoint = EnsureEndpoint();
         for (var i = 0; i < steps; i++)
@@ -463,6 +557,9 @@ internal sealed class SystemVolumeController : IDisposable
                 : endpoint.VolumeStepDown(ref EventContext);
             Marshal.ThrowExceptionForHR(result);
         }
+
+        Marshal.ThrowExceptionForHR(endpoint.GetMasterVolumeLevelScalar(out var volumeLevel));
+        return Math.Clamp((int)Math.Round(volumeLevel * 100, MidpointRounding.AwayFromZero), 0, 100);
     }
 
     private IAudioEndpointVolume EnsureEndpoint()
